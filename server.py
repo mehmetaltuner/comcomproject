@@ -28,7 +28,7 @@ class WrongPacketType(Error):
 
 class Server(object):
 
-    def __init__(self, PORT = 65432, erRate = 0, TIMEOUT=0.01, N = 10):
+    def __init__(self, PORT = 65432, erRate = 40, TIMEOUT=0.0001, N = 100):
         self.PORT = PORT
         self.session_key = Random.get_random_bytes(32)
         self.AESchiper = AES.new(self.session_key, AES.MODE_ECB)
@@ -117,18 +117,18 @@ class Server(object):
             try:
                 data = bytes(data, "utf-8")
             except Exception as err:
-                print("Error while converting data to bytes: ", err)
+                #print("Error while converting data to bytes: ", err)
                 raise err
 
         length = toByte(len(data))
 
         packet = ptype + length + seq_num + data
         packet = pad(packet)
-        #print('RSA', self.RSAkey)
-        #print('Senden Packet', packet, unpad(packet))
+        ##print('RSA', self.RSAkey)
+        ##print('Senden Packet', packet, unpad(packet))
         encpted_packet = self.AESchiper.encrypt(packet)
-        #print('Session KEy', self.session_key)
-        #print('decrypted packet: ', self.decrypt(encpted_packet))
+        ##print('Session KEy', self.session_key)
+        ##print('decrypted packet: ', self.decrypt(encpted_packet))
         self.unreliable_send(encpted_packet, client)
         return encpted_packet
 
@@ -155,14 +155,14 @@ while True:
     try:
         if mob.status == 'Start':
             packet, client = mob.serverSocket.recvfrom(1024)
-            print('Getting start message')
+            #print('Getting start message')
             file_recv = mob.receive_handshake_message(packet)
-            print('message received ', mob.filename)
+            #print('message received ', mob.filename)
             if not file_recv:
-                print('No file with filename: ', mob.filename)
+                #print('No file with filename: ', mob.filename)
                 time.sleep(mob.TIMEOUT)
             else:
-                print('Message is received Status is changed to handshaking')
+                #print('Message is received Status is changed to handshaking')
                 mob.status = 'Handshaking'
 
         elif mob.status == 'Handshaking':
@@ -170,18 +170,19 @@ while True:
             mob.send_handshake_message(client)
         
             packet, client = mob.serverSocket.recvfrom(1024)
-            print('Sending Handshake Message')
-            print('Getting ack for handshake message')
+            #print('Sending Handshake Message')
+            #print('Getting ack for handshake message')
             if(packet[0] == 0):
                 continue
             packet = mob.decrypt(packet)
             packet = unpad(packet)
-            print('Decrypting Message')
-            print('Packet = ', packet)
-            print('Packet Type ', packet[0])
+            #print('Decrypting Message')
+            #print('Packet = ', packet)
+            #print('Packet Type ', packet[0])
             if (packet[0] == 1):
                 mob.status = 'DataTransfer'
-                
+            
+            start_time = time.time()
 
         elif mob.status == 'DataTransfer':
             if not data_to_send:
@@ -199,12 +200,16 @@ while True:
                    pass
                 mob.serverSocket.close()
                 print(mob.total_sended_packet, total_packets)
+                print("Packet Loss: ", -total_packets + mob.total_sended_packet)
+                exe_time = time.time() - start_time
+                print("Execution Time: ", exe_time)
+                print("Packet per sec: ", mob.total_sended_packet/exe_time)
                 exit(0)
 
             for i in range(mob.N):
                 if (mob.send_base + i >= len(data_to_send)):
                     break
-                print("SENDING SEG ", (last_recvd_ack+i)%256, mob.send_base)
+                #print("SENDING SEG ", (last_recvd_ack+i)%256, mob.send_base)
                 raw_enc_packet = mob.send_data_message(data_to_send[mob.send_base + i], (last_recvd_ack+i)%256, client)
                 mob.total_sended_packet += 1
                 mob.row += 1
@@ -214,28 +219,28 @@ while True:
                 while True:
                     packet, _ = mob.serverSocket.recvfrom(1024)
                     ack_seq_num = mob.receive_ack_message(packet)
-                    print("ACK RECVD, send base: ", mob.send_base)
+                    #print("ACK RECVD, send base: ", mob.send_base)
                     if ack_seq_num == last_recvd_ack:
                         last_recvd_ack = (ack_seq_num+1)%256
                         mob.send_base += 1
 
             except WrongPacketType:
-                print("Wrong Packet type")
+                #print("Wrong Packet type")
                 pass
 
             except socket.timeout:
-                print("UN-ACKED PACKETS LIST SIZE: ", len(mob.last_packets))
-                print("SEND BASE PTR: ", mob.send_base, "\n NEXT SEQ PTR: ", mob.next_seq)
+                #print("UN-ACKED PACKETS LIST SIZE: ", len(mob.last_packets))
+                #print("SEND BASE PTR: ", mob.send_base, "\n NEXT SEQ PTR: ", mob.next_seq)
                 continue
 
     except Exception as ex:
-        print(ex)
+        #print(ex)
         continue
     
 
-print(mob.total_sended_packet, total_packets)
+#print(mob.total_sended_packet, total_packets)
 
-# print('asdsad')
+# #print('asdsad')
 # mob.receive_handshake_message(packet)
 # mob.send_handshake_message(client)
 # mob.serverSocket.close()
