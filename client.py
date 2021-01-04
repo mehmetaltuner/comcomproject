@@ -9,7 +9,7 @@ def pad(s):
     #return s + (16 - len(s) % 16) * chr(16 - len(s) % 16)
     return s + (16 - len(s) % 16) * bytes([(16 - len(s) % 16)])
 def unpad(s):
-    return s[:-ord(s[len(s)-1:])]
+    return s[:-ord(s[len(s) - 1:])]
 
 # Represents integers from 0-255 in one byte
 def toByte(s):
@@ -36,7 +36,7 @@ status = "Start"
 
 errRate = 10 # Average Error rate of the unreliable channel
 TIMEOUT = 0.01 # Timeout value
-N = 10 # Go-back-N N
+N = 1 # Go-back-N N
 
 filename = b'crime-and-punishment.txt'
 
@@ -65,8 +65,6 @@ print(enc, dec)
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)     # Create UDP socket
 sock.settimeout(TIMEOUT)                                    # If no packets came after TIMEOUT
                                                             # Then throw exception
-row = 0
-
 while True:
     try:
         if status == "Start":
@@ -103,7 +101,7 @@ while True:
 
                     status = "DataTransfer"
                 else:
-                    print("SERVER SENT WRONG PACKET. PACKET TYPE: ", data[0])
+                    print("SERVER SENT WRONG PACKET")
                     exit(1)
             
             elif status == "DataTransfer":
@@ -114,28 +112,20 @@ while True:
                     packetLenght = data[1]
                     sequenceNumber = data[2]
 
-                    packet = toByte(1) + toByte(nextSeqNum)
+                    packet = toByte(1) + toByte(sequenceNumber)
+                    print("Getted seq num", sequenceNumber)
                     packet = pad(packet)
                     packet = AEScipher.encrypt(packet)
-                    
+                    unreliableSend(packet, sock, user, errRate)
 
                     if sequenceNumber == nextSeqNum: 
                         payload = data[3:3+packetLenght].decode('utf-8')
                         print(sequenceNumber, payload[:-1])
                         nextSeqNum = (nextSeqNum + 1) % 256
-                        unreliableSend(packet, sock, user, errRate)
-                        
-                        row += 1
-                        #print("ROW: ", row)
-                        
                         
                     else:
-                        payload = data[3:3+packetLenght].decode('utf-8')
-                        print("DISCARDED DATA: ", payload)
-                        #print("Discarding packet: ", sequenceNumber, ", expected:", nextSeqNum)
+                        print("Discarding packet", sequenceNumber, "expected", nextSeqNum)
                         pass # if it is not expected discard the packet
-
-                    
 
                 elif packetType == 3:
                     print("Transmission Complete")
@@ -146,7 +136,7 @@ while True:
                     status = "Ending"
                     exit(0)
                 else:
-                    print("SERVER SENT WRONG PACKET IN DATATRANSFER MODE, PACKET TYPE: ", packetType)
+                    print("SERVER SENT WRONG PACKET")
                     exit(1)
     except Exception as ex:         
         #print(ex)

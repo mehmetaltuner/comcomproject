@@ -48,6 +48,7 @@ class Server(object):
         self.next_seq = 0
         self.partition = 64
         self.row = 0
+        self.total_sended_packet = 0
 
 
     def unreliable_send(self, packet, client):
@@ -147,8 +148,8 @@ mob = Server()
 yolla = True
 client = None
 data_to_send = None
-last_recvd_ack = -1
-
+last_recvd_ack = 0
+total_packets = 0
 
 while True:
     try:
@@ -187,8 +188,9 @@ while True:
                 with open("crime-and-punishment.txt", "r") as file_stream:
                     data_to_send = file_stream.read()
                 data_to_send = data_to_send.split("\n")
+                total_packets = len(data_to_send)
 
-            if mob.row >= len(data_to_send) and len(mob.last_packets) == 0:
+            if mob.send_base >= len(data_to_send) and len(mob.last_packets) == 0:
                 print("Done sending packets to the client, closing the socket")
                 mob.send_fin_message(client)
                 try:
@@ -196,40 +198,43 @@ while True:
                 except WrongPacketType as err:
                    pass
                 mob.serverSocket.close()
+                print(mob.total_sended_packet, total_packets)
                 exit(0)
 
-            while mob.next_seq < mob.send_base + mob.N and mob.row < len(data_to_send):
-                print("SENDING SEG ", mob.next_seq)
-                raw_enc_packet = mob.send_data_message(data_to_send[mob.row], mob.next_seq, client)
+            for i in range(mob.N):
+                if (mob.send_base + i >= len(data_to_send)):
+                    break
+                print("SENDING SEG ", (last_recvd_ack+i)%256, mob.send_base)
+                raw_enc_packet = mob.send_data_message(data_to_send[mob.send_base + i], (last_recvd_ack+i)%256, client)
+                mob.total_sended_packet += 1
                 mob.row += 1
-                mob.next_seq = (mob.next_seq+1) % 256
-                mob.last_packets.append(raw_enc_packet)
+                
 
             try:
-                packet, _ = mob.serverSocket.recvfrom(1024)
-                ack_seq_num = mob.receive_ack_message(packet)
-                mob.send_base = ack_seq_num
-                print("ACK RECVD, send base: ", mob.send_base)
-                if ack_seq_num != last_recvd_ack:
-                    mob.last_packets.pop(0)
-                    last_recvd_ack = ack_seq_num
+                while True:
+                    packet, _ = mob.serverSocket.recvfrom(1024)
+                    ack_seq_num = mob.receive_ack_message(packet)
+                    print("ACK RECVD, send base: ", mob.send_base)
+                    if ack_seq_num == last_recvd_ack:
+                        last_recvd_ack = (ack_seq_num+1)%256
+                        mob.send_base += 1
 
             except WrongPacketType:
+                print("Wrong Packet type")
                 pass
 
             except socket.timeout:
                 print("UN-ACKED PACKETS LIST SIZE: ", len(mob.last_packets))
                 print("SEND BASE PTR: ", mob.send_base, "\n NEXT SEQ PTR: ", mob.next_seq)
-                if mob.send_base == mob.next_seq:
-                    continue
-                for packet in mob.last_packets:
-                    mob.send_raw_enc_packet(packet, client)
+                continue
 
     except Exception as ex:
         print(ex)
         continue
     
-# 
+
+print(mob.total_sended_packet, total_packets)
+
 # print('asdsad')
 # mob.receive_handshake_message(packet)
 # mob.send_handshake_message(client)
